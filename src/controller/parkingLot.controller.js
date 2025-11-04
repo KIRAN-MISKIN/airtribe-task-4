@@ -6,7 +6,7 @@ exports.createParkingLot = async (req, res) => {
     if (!name || !address || !floors) {
       return res.status(400).json({ error: 'Name, address, and floors are required.' });
     }
-    const checkExisting = await ParkingLot.findOne({ where: { name } });
+    const checkExisting = await ParkingLot.findOne({ name  });
     if (checkExisting) {
       return res.status(400).json({ error: 'Parking lot with this name already exists.' });
     }
