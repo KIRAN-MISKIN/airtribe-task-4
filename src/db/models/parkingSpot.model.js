@@ -4,7 +4,7 @@ const { vehicleTypes } = require('../../config');
 
 const SpotSchema = new Schema({
   parkingLotId: { type: Schema.Types.ObjectId, ref: 'ParkingLot', required: true },
-  floorId: { type: Schema.Types.ObjectId, ref: 'Floor', required: true },
+  floorId: { type: Schema.Types.ObjectId, ref: 'ParkingFloor', required: true },
   spotNumber: { type: String, required: true }, // e.g., F1-001
   supportedTypes: [{ type: String, enum: vehicleTypes, required: true }],
   isOccupied: { type: Boolean, default: false },
