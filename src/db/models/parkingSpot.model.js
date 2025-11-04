@@ -1,9 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
-
-
-// Vehicle types: motorcycle, small, medium, heavy
-const vehicleTypes = ['motorcycle', 'small', 'medium', 'heavy'];
+const { vehicleTypes } = require('../../config');
 
 const SpotSchema = new Schema({
   parkingLotId: { type: Schema.Types.ObjectId, ref: 'ParkingLot', required: true },

@@ -1,8 +1,6 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
-
-// Vehicle types: motorcycle, small, medium, heavy
-const vehicleTypes = ['motorcycle', 'small', 'medium', 'heavy'];
+const { vehicleTypes } = require('../../config');
 
 const VehicleSchema = new Schema({
   licensePlate: { type: String, required: true, unique: true, index: true },
