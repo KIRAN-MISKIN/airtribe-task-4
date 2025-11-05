@@ -9,6 +9,8 @@ Key components
 
 Design summary
 
+- There is a single ParkingLot (the system assumes one lot) containing two floors by default: "Ground" and "First Floor". The API auto-assigns vehicles to an available spot across the lot — clients do not need to provide the parking lot or floor when checking in.
+
 - ParkingLot contains multiple floors (`ParkingFloor`).
 - Each floor has multiple `ParkingSpot` documents with `supportedTypes` (motorcycle, small, medium, heavy).
 - When a vehicle arrives a `ParkingSession` is created and a `ParkingSpot` is atomically reserved by setting `isOccupied=true` and `currentSessionId`.
@@ -27,7 +29,7 @@ Endpoints (summary)
 - POST /parkinglots — create a parking lot (already implemented)
 - POST /parkingfloors — create a floor
 - POST /parkingspots — create a parking spot
-- POST /vehicles — park vehicle and get ticket (body: licensePlate, vehicleType, parkingLotId)
+- POST /vehicles — park vehicle and get ticket (body: licensePlate, vehicleType). The server auto-selects the parking lot and floor; `parkingLotId` is optional and only used for administrative/testing purposes.
 - PUT /vehicles/:ticketId — unpark (checkout) and calculate fee
 - GET /vehicles/:ticketId — get session/ticket details
 - POST /rateconfigs — create rate config for a parking lot
@@ -144,13 +146,13 @@ This section documents every endpoint implemented in the project with expected r
 4) Park a vehicle (check-in / allocate spot)
   - Method: POST
   - Path: /vehicles
-  - Request body:
+  - Request body (normal client usage):
     {
       "licensePlate": "ABC-123",
       "vehicleType": "small",   // one of: motorcycle, small, medium, heavy
-      "parkingLotId": "<parkingLotId>",
       "ownerName": "Alice"      // optional
     }
+  - Notes: `parkingLotId` is optional. When omitted the server will auto-select the single configured parking lot and find an available spot across floors.
   - Success (201): returns a ticket object with session id and spot info
     {
       "ticketId": "<sessionId>",
@@ -161,8 +163,8 @@ This section documents every endpoint implemented in the project with expected r
       "entryAt": "2025-..."
     }
   - Failure (400): missing params or invalid vehicleType
-    { "error": "licensePlate, vehicleType and parkingLotId are required." }
-  - Failure (404): no available spot for requested vehicle type
+    { "error": "licensePlate and vehicleType are required." }
+  - Failure (404): no available spot for requested vehicle type or no parking lot configured
     { "error": "No available spot for this vehicle type." }
 
 Notes on allocation: allocation is atomic — the API uses a single findOneAndUpdate that sets isOccupied=true and assigns a generated currentSessionId. This prevents double-assignment when multiple requests arrive concurrently.

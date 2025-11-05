@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { ParkingSpot, ParkingSession, Vehicle, RateConfig } = require('../db');
+const { ParkingSpot, ParkingSession, Vehicle, RateConfig, ParkingLot } = require('../db');
 const { vehicleTypes } = require('../config');
 
 function calculateFee(entryAt, exitAt, vehicleType, rateConfig) {
@@ -29,18 +29,29 @@ function calculateFee(entryAt, exitAt, vehicleType, rateConfig) {
 }
 
 exports.parkVehicle = async (req, res) => {
+	let sessionId;
 	try {
-		const { licensePlate, vehicleType, parkingLotId, ownerName } = req.body;
-		if (!licensePlate || !vehicleType || !parkingLotId) {
-			return res.status(400).json({ error: 'licensePlate, vehicleType and parkingLotId are required.' });
+		const { licensePlate, vehicleType, parkingLotId: providedLotId, ownerName } = req.body;
+		if (!licensePlate || !vehicleType) {
+			return res.status(400).json({ error: 'licensePlate and vehicleType are required.' });
 		}
 		if (!vehicleTypes.includes(vehicleType)) return res.status(400).json({ error: 'Invalid vehicleType.' });
 
-		const sessionId = new mongoose.Types.ObjectId();
+		// Determine parking lot: if provided use it, otherwise auto-select the single parking lot
+		let lot = null;
+		if (providedLotId) {
+			lot = await ParkingLot.findById(providedLotId);
+			if (!lot) return res.status(404).json({ error: 'Parking lot not found.' });
+		} else {
+			lot = await ParkingLot.findOne();
+			if (!lot) return res.status(404).json({ error: 'No parking lot configured. Please create a parking lot first.' });
+		}
+
+		sessionId = new mongoose.Types.ObjectId();
 
 		// Reserve a spot atomically by marking isOccupied true and setting a temporary currentSessionId
 		const spot = await ParkingSpot.findOneAndUpdate(
-			{ parkingLotId, supportedTypes: vehicleType, isOccupied: false },
+			{ parkingLotId: lot._id, supportedTypes: vehicleType, isOccupied: false },
 			{ $set: { isOccupied: true, currentSessionId: sessionId } },
 			{ new: true }
 		);
@@ -59,7 +70,7 @@ exports.parkVehicle = async (req, res) => {
 			_id: sessionId,
 			vehicleId: vehicle._id,
 			licensePlate,
-			parkingLotId,
+			parkingLotId: lot._id,
 			floorId: spot.floorId,
 			spotId: spot._id,
 			entryAt: new Date(),
