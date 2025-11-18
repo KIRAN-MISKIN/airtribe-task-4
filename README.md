@@ -1,3 +1,4 @@
+```markdown
 Smart Parking — Backend (Node.js + Express + MongoDB)
 
 Changelog / Recent changes
@@ -277,3 +278,4 @@ Allocation & concurrency notes
 Testing suggestions
 - Add integration tests using mongodb-memory-server to verify allocation correctness and concurrency safety.
 - Add unit tests for fee calculation (edge cases: exact unit boundaries, grace minutes, rounding modes).
+```
