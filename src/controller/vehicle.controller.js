@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const { ParkingSpot, ParkingSession, Vehicle, RateConfig, ParkingLot } = require('../db');
+const { ParkingSpot, ParkingSession, Vehicle, RateConfig, ParkingLot, ParkingFloor } = require('../db');
+const { createParkingSpot } = require('../utils/test')
 const { vehicleTypes } = require('../config');
 
 function calculateFee(entryAt, exitAt, vehicleType, rateConfig) {
@@ -31,32 +32,59 @@ function calculateFee(entryAt, exitAt, vehicleType, rateConfig) {
 exports.parkVehicle = async (req, res) => {
 	let sessionId;
 	try {
-		const { licensePlate, vehicleType, parkingLotId: providedLotId, ownerName } = req.body;
+		const { licensePlate, vehicleType, ownerName } = req.body;
 		if (!licensePlate || !vehicleType) {
-			return res.status(400).json({ error: 'licensePlate and vehicleType are required.' });
+			return res.status(400).json({ message: 'licensePlate and vehicleType are required.' });
 		}
-		if (!vehicleTypes.includes(vehicleType)) return res.status(400).json({ error: 'Invalid vehicleType.' });
+		if (!vehicleTypes.includes(vehicleType)) return res.status(400).json({ message: 'Invalid vehicleType.' });
 
 		// Determine parking lot: if provided use it, otherwise auto-select the single parking lot
-		let lot = null;
-		if (providedLotId) {
-			lot = await ParkingLot.findById(providedLotId);
-			if (!lot) return res.status(404).json({ error: 'Parking lot not found.' });
-		} else {
-			lot = await ParkingLot.findOne();
-			if (!lot) return res.status(404).json({ error: 'No parking lot configured. Please create a parking lot first.' });
+		let lot = await ParkingLot.findOne();
+		if (!lot) return res.status(404).json({ message: 'No parking lot configured. Please create a parking lot first.' });
+
+		const vechileParkChecking = await ParkingSession.find(
+			{ licensePlate: licensePlate, status: 'active' }
+		)
+		if (vechileParkChecking.length > 0) {
+			return res.status(400).json({ message: 'Vehicle is already parked.' });
 		}
 
 		sessionId = new mongoose.Types.ObjectId();
 
 		// Reserve a spot atomically by marking isOccupied true and setting a temporary currentSessionId
-		const spot = await ParkingSpot.findOneAndUpdate(
+		let spot = await ParkingSpot.findOneAndUpdate(
 			{ parkingLotId: lot._id, supportedTypes: vehicleType, isOccupied: false },
 			{ $set: { isOccupied: true, currentSessionId: sessionId } },
 			{ new: true }
 		);
 
-		if (!spot) return res.status(404).json({ error: 'No available spot for this vehicle type.' });
+		if (!spot) {
+			const floorcheck = await ParkingFloor.find();
+			for (let i = 0; i < floorcheck.length; i++) {
+				const floor = floorcheck[i]
+				if (floor.capacities[vehicleType] > 0) {
+					// Create spot on this floor
+					const payload = {
+						parkingLotId: lot._id,
+						floorId: floor._id,
+						spotNumber: `Auto-${Date.now()}`,
+						supportedTypes: vehicleType
+					}
+					spot = await createParkingSpot(payload);
+				}
+				if (!spot) {
+					return res.status(500).json({ error: 'Failed to create parking spot.' });
+				}
+
+				await ParkingFloor.findByIdAndUpdate(
+					floor._id,
+					{ $inc: { 'capacities.vehicleType': -1 } }
+				);
+				break;
+			}
+		}
+
+		// if (!spot) return res.status(404).json({ error: 'No available spot for this vehicle type.' });
 
 		// upsert vehicle record
 		const vehicle = await Vehicle.findOneAndUpdate(
@@ -142,8 +170,53 @@ exports.getParkingTicketDetails = async (req, res) => {
 
 		if (!session) return res.status(404).json({ error: 'Parking session not found.' });
 
-		res.json(session);
+		const detailes = {
+			ticketId: session._id,
+			licensePlate: session.licensePlate,
+			vehicleType: session.vehicleId?.vehicleType,
+			ownerName: session.vehicleId?.ownerName ?? "N/A",
+			parkingLotName: session.parkingLotId?.name ?? "N/A",
+			floorNumber: session.floorId?.floorNumber ?? "N/A",
+			spotNumber: session.spotId?.spotNumber,
+			entryAt: session.entryAt,
+			exitAt: session.exitAt,
+			fee: session.fee,
+			status: session.status,
+			paymentStatus: session.paymentStatus
+		}
+
+		res.json(detailes);
 	} catch (error) {
 		res.status(500).json({ error: error.message });
 	}
 };
+
+exports.getParkedDetails = async (req, res) => {
+	try {
+		const alldetailes = await ParkingSession.find().populate([
+			{ path: "vehicleId" },
+			{ path: "parkingLotId" },
+			{ path: "floorId" },
+			{ path: "spotId" }
+		]);
+		const statusActive = alldetailes.filter(session => session.status === 'active');
+		const detailes = statusActive.map((session)=>{
+			return (
+				{
+					ticketId: session._id,
+					licensePlate: session.licensePlate,
+					vehicleType: session.vehicleId?.vehicleType,
+					ownerName: session.vehicleId?.ownerName ?? "N/A",
+					parkingLotName: session.parkingLotId?.name ?? "N/A",
+					floorNumber: session.floorId?.floorNumber ?? "N/A",
+					spotNumber: session.spotId?.spotNumber,
+					entryAt: session.entryAt
+				}
+			)
+		})
+		res.status(200).json(detailes)
+	} catch (err) {
+		console.warn(err)
+		res.status(500).json({ error: err.message });
+	}
+}
