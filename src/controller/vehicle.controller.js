@@ -78,11 +78,7 @@ exports.parkVehicle = async (req, res) => {
 
 				await ParkingFloor.findByIdAndUpdate(
 					floor._id,
-					{
-						$inc: {
-							[`capacities.${vehicleType}`]: -1
-						}
-					}
+					{ $inc: { 'capacities.vehicleType': -1 } }
 				);
 				break;
 			}
@@ -157,7 +153,7 @@ exports.unparkVehicle = async (req, res) => {
 
 		res.json({ ticketId: session._id, exitAt: session.exitAt, fee });
 	} catch (error) {
-		res.status(400).json({ error: "Something went wrong" });
+		res.status(500).json({ error: error.message });
 	}
 };
 
@@ -204,7 +200,7 @@ exports.getParkedDetails = async (req, res) => {
 			{ path: "spotId" }
 		]);
 		const statusActive = alldetailes.filter(session => session.status === 'active');
-		const detailes = statusActive.map((session) => {
+		const detailes = statusActive.map((session)=>{
 			return (
 				{
 					ticketId: session._id,
